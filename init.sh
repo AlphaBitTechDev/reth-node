@@ -6,8 +6,10 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
+groupadd docker
+usermod -aG docker $USER
 
-ufw allow ssh        # SSH (always important)
+# ufw allow ssh        # SSH (always important)
 # ufw allow 443/tcp    # Nginx (HTTPS for Grafana) - Or 80/tcp if using HTTP
 ufw allow 8545/tcp   # Reth RPC
 ufw allow 8546/tcp   # Reth WSS
@@ -25,7 +27,7 @@ ufw allow out 53/udp     # DNS
 # sudo ufw allow 9090/tcp   # Prometheus
 # sudo ufw allow 9091/tcp   # Metrics exporter
 
-for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do sudo apt-get remove $pkg; done
+for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do sudo apt-get remove -y $pkg; done
 
 apt update -y
 apt install ca-certificates curl -y
@@ -44,8 +46,14 @@ apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-co
 ufw allow 80/tcp
 ufw allow 443/tcp
 
-certbot certonly --standalone -d alphabit.app -d grafana.alphabit.app --email admin@alphabit.app --agree-tos -v
+mkdir -p /home/node/reth-node/certs
+mkdir -p /home/node/reth-node/reth_data
+mkdir -p /home/node/reth-node/web
+apt install certbot -y
+certbot certonly --standalone -d alphabit.app -d grafana.alphabit.app -d prometheus.alphabit.app -d api.alphabit.app -d app.alphabit.app -d play.alphabit.app -d auth.alphabit.app --email admin@alphabit.app --agree-tos -v
 cp /etc/letsencrypt/live/alphabit.app/fullchain.pem /home/node/reth-node/certs/fullchain.pem
 cp /etc/letsencrypt/live/alphabit.app/privkey.pem /home/node/reth-node/certs/privkey.pem
+
+openssl rand -hex 32 | tr -d "\n" | tee > /home/node/reth-node/jwt.hex
 
 ufw deny 80/tcp

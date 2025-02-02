@@ -7,4 +7,6 @@ __pycache__/
 .venv
 .venv/
 .DS_Store
-reth_data/*
+certs
+reth_data
+web

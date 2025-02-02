@@ -111,6 +111,19 @@ services:
              find /etc/grafana/provisioning/dashboards/ -name '*.json' -exec sed -i 's/$${DS_PROMETHEUS}/Prometheus/g' {} \+ &&
              /run.sh"
 
+  node-exporter:
+    image: prom/node-exporter:latest
+    ports:
+      - "9100:9100" # Expose Node Exporter's port
+    volumes:
+      - /proc:/host/proc:ro # Mount /proc for system info
+      - /sys:/host/sys:ro # Mount /sys for system info
+      - /:/rootfs:ro # Mount / for filesystem info (use with caution)
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - '--collector.filesystem.ignored-mount-points="^/(sys|proc|dev|host|etc)($$|/)"'
+
 volumes:
   lighthouse_data:
   prometheus_data:
