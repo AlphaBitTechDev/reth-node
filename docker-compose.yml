@@ -1,0 +1,118 @@
+version: "3.9"
+
+services:
+  reth:
+    restart: unless-stopped
+    image: ghcr.io/paradigmxyz/reth:latest
+    ports:
+      - "9001:9001" # metrics
+      - "30303:30303" # eth/66 peering
+      - "8545:8545" # rpc
+      - "8546:8546" # wss
+      - "8551:8551" # engine
+    volumes:
+      - ./reth_data:/root/.local/share/reth/mainnet
+      - ./jwt.hex:/var/lib/reth/jwt.hex:ro
+      - logs:/root/logs
+    pid: host
+    command: >-
+      node
+      --chain mainnet
+      --metrics 0.0.0.0:9001
+      --log.file.directory /root/logs
+      --authrpc.addr 0.0.0.0
+      --authrpc.port 8551
+      --authrpc.jwtsecret /var/lib/reth/jwt.hex
+      --http --http.addr 0.0.0.0 --http.port 8545
+      --http.api "eth,net,web3,admin"
+
+  lighthouse:
+    restart: unless-stopped
+    image: sigp/lighthouse:v5.1.3-modern # Use a specific version
+    depends_on:
+      - reth
+    ports:
+      - "5052:5052/tcp" # rpc
+      - "5053:5053/tcp"
+      - "5054:5054/tcp" # metrics
+      - "9000:9000/tcp" # p2p
+      - "9000:9000/udp" # p2p
+    volumes:
+      - lighthouse_data:/root/.lighthouse
+      - ./jwt.hex:/root/jwt/jwt.hex:ro
+    command: >-
+      lighthouse bn
+      --network mainnet
+      --http --http-address 0.0.0.0
+      --execution-endpoint http://reth:8551
+      --metrics --metrics-address 0.0.0.0
+      --execution-jwt /root/jwt/jwt.hex
+      --checkpoint-sync-url https://mainnet.checkpoint.sigp.io
+
+  metrics-exporter:
+    restart: unless-stopped
+    image: ethpandaops/ethereum-metrics-exporter:debian-latest
+    depends_on:
+      - reth
+      - lighthouse
+    ports:
+      - 9091:9091 # metrics
+    volumes:
+      - ./ethereum-metrics-exporter.yaml:/root/config.yaml # Make sure this path is correct
+    command:
+      - --config=/root/config.yaml
+      - --metrics-port=9091
+
+  prometheus:
+    restart: unless-stopped
+    image: prom/prometheus
+    depends_on:
+      - reth
+    ports:
+      - 9090:9090
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+
+  nginx:
+    image: nginx:latest # Or a specific Nginx version
+    ports:
+      - "80:80"
+      - "443:443" # Expose HTTPS
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf # Mount Nginx config
+      - ./certs:/etc/ssl/certs # Mount SSL certificates
+      - ./web:/var/www/html
+    depends_on:
+      - grafana # Make sure Grafana is running first
+
+  grafana:
+    restart: unless-stopped
+    image: grafana/grafana:latest
+    depends_on:
+      - reth
+      - prometheus
+    ports:
+      - 3000:3000
+    environment:
+      PROMETHEUS_URL: http://prometheus:9090
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/dashboards:/etc/grafana/provisioning_temp/dashboards
+    # 1. Copy dashboards from temp directory to prevent modifying original host files
+    # 2. Replace Prometheus datasource placeholder with the actual name
+    # 3. Run Grafana
+    entrypoint: >
+      sh -c "cp -r /etc/grafana/provisioning_temp/dashboards/. /etc/grafana/provisioning/dashboards &&
+             find /etc/grafana/provisioning/dashboards/ -name '*.json' -exec sed -i 's/$${DS_PROMETHEUS}/Prometheus/g' {} \+ &&
+             /run.sh"
+
+volumes:
+  lighthouse_data:
+  prometheus_data:
+  grafana_data:
+  logs:
