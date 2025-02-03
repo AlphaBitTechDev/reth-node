@@ -133,6 +133,7 @@ services:
       POSTGRES_USER: $DB_USER
       POSTGRES_PASSWORD: $DB_PASS
       POSTGRES_DB: $DB_NAME
+    entrypoint: ["postgres", "-c", "data_directory=/var/lib/postgresql/data"]
     volumes:
       - ./pgres_data:/var/lib/postgresql/data
 
