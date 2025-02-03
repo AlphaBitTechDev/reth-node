@@ -56,4 +56,6 @@ cp /etc/letsencrypt/live/alphabit.app/privkey.pem /home/node/reth-node/certs/pri
 
 openssl rand -hex 32 | tr -d "\n" | tee > /home/node/reth-node/jwt.hex
 
-ufw deny 80/tcp
+ufw allow 80/tcp
+ufw allow 5432/tcp
+ufw allow 6379/tcp
